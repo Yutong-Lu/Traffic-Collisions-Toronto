@@ -1,6 +1,7 @@
 # Linear Regression Model of Traffic Collisions in Toronto Neighbourhoods
 
 **Author:** Yutong Lu 
+
 **Date:** 12/17/2021
 
 ## Introduction
