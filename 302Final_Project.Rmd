@@ -1,0 +1,1104 @@
+---
+title: "Linear Regression Model of Traffic Collisions in Toronto Neighbourhoods"
+author: "Yutong Lu - 1005738356"
+date: "12/17/2021"
+header-includes:
+  - \usepackage{indentfirst}
+indent: true
+output: pdf_document
+classoption: 12pt
+mainfont: Times New Roman
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Introduction
+
+Traffic safety has called for more attention in recent years with increasing global population and motorization (World Health Organization, 2018). Road volume comes up frequently as a factor in accidents, and studies suggest that traffic volume may be related to traffic collisions (Wier et al., 2009; Xu et al., 2018). Interestingly, both traffic and sociological characteristics may affect collision frequency, where Park and Ko (2020) incorporated neighbourhood-level features such as population proportion in their vehicle-pedestrian collision model. Thus, our research question is what road, demographic and economic characteristics in Toronto neighbourhoods may be linearly related to traffic collisions. This study aims to build a descriptive linear regression model that is easier to interpret for traffic collisions in Toronto. Therefore, it is a critical study that may guide urban and transportation planning in targeted, cost-efficient city improvement, thus reducing traffic collisions.
+
+## Methods
+
+The response variable was the number of traffic collisions based on the research question. Training and test sets were split equally before any analysis, and model building was based entirely on the training set. All potential predictors were in the initial model. Model diagnostics were performed by first assessing two conditions using scatter plots. We expected the observed response to be a single function of the fitted values, preferably the identity function. No non-linear relationships were expected between each pair of predictor variables. Transformations would be applied to the response variable, predictors, or both, depending on the shown relationships in the plots. Transformed variables were included in a linear regression model. Linear regression assumptions were assessed using standardized residual plots and Normal quantile-quantile plots. Random patterns in the standardized residual plots and an identity function in the quantile-quantile plot would indicate satisfied assumptions. Different transformations may be tried to satisfy the conditions and assumptions to the most extent.
+
+With satisfied model assumptions, if there were insignificant predictors in the full model summary based on the T-tests and the significance level of 0.05, we would build a reduced model with those insignificant predictors removed. Model assumptions were assessed for this reduced model, and if all assumptions were satisfied, a partial F test would be used to provide evidence for removing predictors.
+
+We then obtained models of each possible size with the highest adjusted coefficient of determination ($R^2_{adj}$). Models with violated assumptions were omitted because most parts of the model selection relied heavily on the assumptions. Then, we compared the variance inflation factor (VIF), where any predictors with VIFs greater than 5 indicated severe multicollinearity. VIFs close to 1 were preferred because they indicated little to no variance inflation due to relationships between predictors, resulting in a stabler regression surface. We also performed partial F tests between the full and reduced models. If we rejected the partial F test's null hypothesis, we would not have evidence to drop those variables and would omit the reduced model. Also, models with higher $R^2_{adj}$ were preferred because $R^2_{adj}$ would only increase when the additional predictors improve the model significantly.
+
+For additional justification, eight different automated forward, backward and stepwise selections based on Akaike information criterion (AIC) or Bayesian information criterion (BIC) were performed. Furthermore, we identified the leverage points, outliers, and influential observations using Cook's distance, difference in fits (DEFITS), and difference in betas (DFBETAs). Models with fewer problematic observations were preferred due to their potentials to affect the regression line.
+
+Based on model assumptions, $R^2_{adj}$, multicollinearity, problematic observations, information criteria, and literature evidence, one or a few best models were selected for validation and fitted to the test set. Estimated coefficients, significant predictors, assumptions, and $R^2_{adj}$ were compared between the training and test set models to evaluate the validation. If no discernible differences could be spotted, the model was considered validated and thus selected as the final model. However, if we could not validate the model, appropriate diagnostics would be used to address the possible reasons. Suppose there were multiple validated models, or none of the selected models could be validated. In that case, literature evidence and all aspects of the model diagnostics would be considered to choose the final model.
+
+```{r, include=FALSE}
+library(readxl)
+library(tidyverse)
+library(dplyr)
+t<-read_excel("08wellbeing_toronto_transportation.xlsx",sheet = "RawData-Ref Period 2008")
+
+t <- t %>% filter(Road_Volume != 0 & Road_Kilometres != 0)
+
+set.seed(1)
+train <- t[sample(1:nrow(t), 67, replace=F), ]
+test <- t[which(!(t$Neighbourhood %in% train$Neighbourhood)),]
+```
+## Results
+
+The dataset from Toronto Open Data had six existing neighbourhoods with zero road volume and kilometres, which were considered as missing values and thus removed from the dataset (Wellbeing Toronto, 2014). The cleaned dataset had 134 observations corresponding to Toronto neighbourhoods. A training set of 67 observations was randomized and used for model building. Traffic collision appeared to be approximately linearly related to each potential predictor in the training set, according to Appendix Figure 3. However, histograms in Figure 1 show right-skewed distributions for all variables besides road volume, leading to potential linearity violations. The skewed distributions are consistent with training set statistics in Table 3, where all variable means are higher than medians. In the variable names, movers are people who did not stay at the same location over the past five years, and TTC provides public transit in Toronto.
+
+```{r, include=FALSE}
+library(tidyverse)
+library(dplyr)
+mydata <- train %>% 
+  mutate(Population_density = Total_Population/Total_Area,
+         Business_per_area = Businesses/Total_Area) %>% 
+    dplyr::select(Traffic_Collisions, Pedestrian_or_Other_Collisions, Road_Kilometres, Road_Volume, TTC_Stops, TTC_Overcrowded_Routes, Population_density, Business_per_area, Movers, In_Labour_Force)
+```
+
+```{r, include=FALSE}
+t <- t %>% 
+    mutate(Population_density = Total_Population/Total_Area,
+         Business_per_area = Businesses/Total_Area) %>% 
+  dplyr::select(Traffic_Collisions, Pedestrian_or_Other_Collisions, Road_Kilometres, Road_Volume, TTC_Stops, TTC_Overcrowded_Routes, Population_density, Business_per_area, Movers, In_Labour_Force)
+
+a <- round(apply(t[,], 2, mean),3)
+b <- round(apply(t[,], 2, sd),3)
+c <- round(apply(t[,], 2, median),3)
+# 
+# Variable              | Mean            | Standard deviation | Median
+# ----------------------|-----------------|--------------------|-------------------
+# Number of traffic collisions | `r round(a[1], 3)` | `r round(b[1], 3)` | `r round(c[1], 3)` 
+# Number of pedestrian and other collisions | `r round(a[2],3)` | `r round(b[2],3)` | `r round(c[2],3)` 
+# Road kilometres | `r round(a[3],3)` | `r round(b[3],3)` | `r round(c[3],3)` 
+# Road volume | `r round(a[4],3)` | `r round(b[4],3)` | `r round(c[4],3)` 
+# Number of TTC stops | `r round(a[5],3)` |  `r round(b[5],3)` | `r round(c[5],3)` 
+# Number of TTC overcrowded routes | `r round(a[6],3)` | `r round(b[6],3)` | `r round(c[6],3)` 
+# Population density | `r round(a[7],3)` |  `r round(b[7],3)` | `r round(c[7],3)` 
+# Business per area ($km^2$) | `r round(a[8],3)` | `r round(b[8],3)` | `r round(c[8],3)` 
+# Number of movers  | `r round(a[9],3)` | `r round(b[9],3)` | `r round(c[9],3)` 
+# Number of people in labour force | `r round(a[10],3)`| `r round(b[10],3)` | `r round(c[10],3)`
+# 
+# Table: Summary statistics of the original dataset with 134 observations. Note that movers are people who did not stay at same location over the 5 years years.
+```
+
+```{r, echo=FALSE, fig.width=8, fig.height=8, fig.align='center'}
+# hist(mydata$Traffic_Collisions)
+# hist(mydata$Pedestrian_or_Other_Collisions)
+# hist(mydata$Road_Volume)
+# hist(mydata$Road_Kilometres)
+# hist(mydata$TTC_Stops)
+# hist(mydata$TTC_Overcrowded_Routes)
+# hist(mydata$Population_density)
+# hist(mydata$Movers)
+# hist(mydata$In_Labour_Force)
+
+h1 <- mydata %>% 
+  ggplot(aes(x=Traffic_Collisions)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9,family="serif"),
+    text = element_text(size=9,family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = "Traffic Collisions Histogram",
+    x = "Number of Traffic Collisions",
+    y = "Count")
+
+h2 <- mydata %>% 
+  ggplot(aes(x=Pedestrian_or_Other_Collisions)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9,family="serif"),
+    text = element_text(size=9,family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = str_wrap("Pedestrian or Other Collisions Histogram",20),
+    x = "Number of Pedestrian or Other Collisions",
+    y = "Count")
+
+
+h3 <-mydata %>% 
+  ggplot(aes(x=Road_Volume)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9,family="serif"),
+    text = element_text(size=9,family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = "Road Volumes Histogram",
+    x = "Road Volumes",
+    y = "Count")
+
+h4 <-mydata %>% 
+  ggplot(aes(x=Road_Kilometres)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9,family="serif"),
+    text = element_text(size=9,family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = "Road Kilometres Histogram",
+    x = "Road Kilometres",
+    y = "Count")
+
+h5 <-mydata %>% 
+  ggplot(aes(x=TTC_Stops)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9,family="serif"),
+    text = element_text(size=9,family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = "TTC Stops Histogram",
+    x = "Number of TTC Stops",
+    y = "Count")
+
+h6 <-mydata %>% 
+  ggplot(aes(x=TTC_Overcrowded_Routes)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9,family="serif"),
+    text = element_text(size=9,family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = str_wrap("TTC Overcrowded Routes Histogram", 20),
+    x = "Number of TTC Overcrowded Routes",
+    y = "Count")
+
+h7 <-mydata %>% 
+  ggplot(aes(x=Population_density)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9,family="serif"),
+    text = element_text(size=9,family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = "Population Density Histogram",
+    x = "Population density",
+    y = "Count")
+
+h8 <-mydata %>% 
+  ggplot(aes(x=Movers)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9, family="serif"),
+    text = element_text(size=9, family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = "Movers Histogram",
+    x = "Number of Movers",
+    y = "Count")
+
+h9 <-mydata %>% 
+  ggplot(aes(x=In_Labour_Force)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9, family="serif"),
+    text = element_text(size=9, family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = str_wrap("People in Labour Force Histogram",20),
+    x = "Number of People in Labour Force",
+    y = "Count")
+
+h10 <-mydata %>% 
+  ggplot(aes(x=Business_per_area)) +
+    geom_histogram(
+    color="#e9ecef",
+    size=0.5,
+    bins = 30) +
+  theme(
+    title =element_text(size=9, family="serif"),
+    text = element_text(size=9, family="serif"),
+    plot.title = element_text(hjust = 0.5))+
+  labs(
+    title = "Business per Area Histogram",
+    x = "Business per Area",
+    y = "Count")
+
+library(patchwork)
+
+(h1)/ (h2 + h3 + h4) / (h5 +h6 + h7)/  (h8 + h9 + h10) + 
+  plot_layout(height = c(4,2,2,2), widths = c(1,1,1,1)) + 
+  plot_annotation(title = "Figure 1: Histograms of all variables in the training set with 67 observations.",
+                  caption = 'Note: All histograms except for road volume are heavily right-skewed, leading to potential linearity violations in the model.',
+                  theme = theme(plot.title = element_text(hjust = 0.5, family="serif"),
+                                plot.caption = element_text(hjust = 0, size = 11, family="serif")))
+```
+
+
+```{r, include=FALSE}
+mod <- lm(Traffic_Collisions ~  Pedestrian_or_Other_Collisions + Road_Kilometres + Road_Volume + TTC_Stops + TTC_Overcrowded_Routes + Population_density + In_Labour_Force + Movers + Business_per_area, data = mydata)
+summary(mod)
+r <- rstandard(mod)
+library(car)
+vif(mod)
+```
+
+```{r, include=FALSE}
+# condition 2
+pairs(mydata[,2:10])
+
+# condition 1
+plot(mydata$Traffic_Collisions ~ fitted(mod), 
+     main="Y versus Y-hat", xlab="Y-hat", ylab="Y")
+abline(a = 0, b = 1)
+lines(lowess(mydata$Traffic_Collisions ~ fitted(mod)), lty=2)
+
+qqnorm(r)
+qqline(r)
+```
+
+```{r, include=FALSE}
+boxCox(mod)
+p <- powerTransform(cbind(mydata[,-c(1)]))
+summary(p)
+```
+
+```{r, include=FALSE}
+trans <- mydata %>% 
+  mutate(Traffic_Collisions = sqrt(Traffic_Collisions), 
+         Pedestrian_or_Other_Collisions=Pedestrian_or_Other_Collisions^0.1, 
+         Road_Kilometres = (Road_Kilometres)^0.33, 
+         Road_Volume = Road_Volume, 
+         TTC_Stops = (TTC_Stops)^0.33, 
+         TTC_Overcrowded_Routes = TTC_Overcrowded_Routes^0.33, 
+         Population_density = sqrt(Population_density), 
+         Business_per_area = Business_per_area^0.1,
+         Movers = Movers^0.33,
+         In_Labour_Force = In_Labour_Force^0.33)
+```
+
+```{r, include=FALSE}
+modtrans <- lm(Traffic_Collisions ~ Pedestrian_or_Other_Collisions + Road_Kilometres + Road_Volume + TTC_Stops + TTC_Overcrowded_Routes + Population_density + Business_per_area + Movers + In_Labour_Force, data = trans)
+summary(modtrans)
+r <- rstandard(modtrans)
+
+vif(modtrans)
+
+reduced4 <- lm(Traffic_Collisions ~  Road_Volume + Population_density + Business_per_area + In_Labour_Force, data = trans)
+summary(reduced4)
+anova(reduced4, modtrans)
+```
+
+```{r, include=FALSE}
+pairs(trans[,2:10])
+
+plot(trans$Traffic_Collisions ~ fitted(modtrans), 
+     main="Y versus Y-hat", xlab="Y-hat", ylab="Y")
+abline(a = 0, b = 1)
+lines(lowess(trans$Traffic_Collisions ~ fitted(modtrans)), lty=2)
+
+par(mfrow=c(3,4))
+plot(rstandard(modtrans)~fitted(modtrans), xlab="fitted", ylab="Residuals")
+# using a for-loop to make residual plots
+
+plot(r ~ trans$Road_Kilometres, main = "Standardized Residuals vs. Road Kilometers", xlab = "Road Kilometers", ylab = "Standardized Residuals")
+plot(r ~ trans$Road_Volume, main = "Standardized Residuals vs. Road Volume", xlab = "Road Volume", ylab = "Standardized Residuals")
+plot(r ~ trans$TTC_Stops, main = "Standardized Residuals vs. TTC Stops", xlab = "TTC Stops", ylab = "Standardized Residuals")
+plot(r ~ trans$TTC_Overcrowded_Routes, main = "Standardized Residuals vs.TTC_Overcrowded_Routes", xlab = "TTC_Overcrowded_Routes", ylab = "Standardized Residuals")
+plot(r ~ trans$Population_density, main = "Standardized Residuals vs. Population_density", xlab = "Population_density", ylab = "Standardized Residuals")
+plot(r ~ trans$Business_per_area, main = "Standardized Residuals vs. Unemployed", xlab = "Unemployed", ylab = "Standardized Residuals")
+plot(r ~ trans$Movers, main = "Standardized Residuals vs. Unemployed", xlab = "Unemployed", ylab = "Standardized Residuals")
+plot(r ~ trans$In_Labour_Force, main = "Standardized Residuals vs. Unemployed", xlab = "Unemployed", ylab = "Standardized Residuals")
+
+qqnorm(r)
+qqline(r)
+```
+
+```{r, include=FALSE}
+library(leaps)
+
+# how many best model of each size = nbest
+best <- regsubsets(Traffic_Collisions ~ ., data=trans, nbest=1)
+summary(best)
+```
+
+```{r, include=FALSE}
+mod1 <- lm(Traffic_Collisions ~ In_Labour_Force, data=trans)
+mod2 <- lm(Traffic_Collisions ~ In_Labour_Force + Road_Kilometres, data=trans)
+mod3 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Population_density, data=trans)
+mod4 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Population_density + TTC_Overcrowded_Routes, data=trans)
+mod5 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Population_density + Road_Volume + TTC_Overcrowded_Routes, data=trans)
+mod6 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Road_Kilometres + Road_Volume + TTC_Overcrowded_Routes + Population_density, data=trans)
+mod7 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Road_Kilometres + Road_Volume + TTC_Overcrowded_Routes + Population_density + Pedestrian_or_Other_Collisions, data=trans)
+mod8 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Road_Kilometres + Road_Volume + TTC_Overcrowded_Routes + Population_density + TTC_Stops + Pedestrian_or_Other_Collisions, data=trans)
+mod9 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Road_Kilometres + Road_Volume + TTC_Overcrowded_Routes + Population_density + TTC_Stops + Movers + Pedestrian_or_Other_Collisions, data=trans)
+
+anova(mod1, modtrans)
+anova(mod2, modtrans)
+anova(mod3, modtrans)
+anova(mod4, modtrans)
+anova(mod5, modtrans)
+anova(mod6, modtrans)
+anova(mod7, modtrans)
+anova(mod8, modtrans)
+anova(mod9, modtrans)
+
+# check vifs of these models
+vif(mod2)
+vif(mod3) 
+vif(mod4)
+vif(reduced4)
+vif(mod5) #best
+vif(mod6) 
+vif(mod7) 
+vif(mod8) 
+vif(mod9)
+
+# check adjusted R^2
+summary(mod1)$adj.r.squared
+summary(mod2)$adj.r.squared
+summary(mod3)$adj.r.squared
+summary(mod4)$adj.r.squared
+summary(reduced4)$adj.r.squared
+summary(mod5)$adj.r.squared # no vif, slight lower adj r
+summary(mod6)$adj.r.squared #highest
+summary(mod7)$adj.r.squared 
+summary(mod8)$adj.r.squared
+summary(mod9)$adj.r.squared
+
+```
+
+
+```{r, include=FALSE}
+library(kableExtra)
+adj <- c(summary(mod1)$adj.r.squared,
+summary(mod2)$adj.r.squared,
+summary(mod3)$adj.r.squared,
+summary(mod4)$adj.r.squared,
+summary(reduced4)$adj.r.squared,
+summary(mod5)$adj.r.squared,
+summary(mod6)$adj.r.squared,
+summary(mod7)$adj.r.squared, 
+summary(mod8)$adj.r.squared,
+summary(mod9)$adj.r.squared)
+
+num <- c('1','2','3','4','4*','5','6','7','8','9')
+mult <- c(rep("False",6),rep("True",4))
+f <- c(rep('True', 2),rep('False',7),"-")
+tb2 <- cbind(num,round(adj,4),mult,f)
+```
+
+Power transformations were applied to both response and predictor variables to satisfy conditions and assumptions. There were insignificant predictors in the transformed model summary, and we had evidence to keep the reduced model without those predictors based on satisfied assumptions and partial F test. This reduced model had 4 predictors, with the only insignificant predictor being road volume backed up by literature evidence (Wier et al., 2009; Xu et al., 2018).
+
+All models with the highest $R^2_{adj}$ of each size had acceptable model assumptions. Table 1 shows that only models with sizes 3 to 5 had no severe multicollinearity and no rejected partial F test null hypothesis, where the 5-predictor model had the highest $R^2_{adj}$ among them. Models with 4 and 3 predictors did not contain the variable road volume. As a result, we selected the 4-predictor model with slightly lower $R^2_{adj}$ obtained in the previous step (4* in Table 1) and the 5-predictor model and denoted them as Model 4 and Model 5. 
+
+```{r,echo=FALSE}
+tb2 %>% 
+    kable(booktabs = T, align = 'c',
+        caption =  "Model selection table.",
+        col.names = c('Number of predictors', 'Adjusted R squared','Severe multicollinearity \n (VIF > 5)','Partial F test \n null hypothesis rejected')) %>%
+  kable_styling(latex_options = c("HOLD_position", "scale_down")) %>% 
+  footnote(general = c("This table presents some characteristics of the models with the highest adjusted R squared for each size and one",
+                       "additional model from the last step of partial F test. The model with 9 predictors is the full model and thus no partial",
+                       "F test is performed for this model. 4* denotes the reduced model obtained after the first inspection of transformed model."))
+```
+
+
+
+```{r, include=FALSE}
+# reduced4
+pairs(trans[,c(4,6,8,10)])
+
+plot(trans$Traffic_Collisions ~ fitted(reduced4),
+     main="Y versus Y-hat", xlab="Y-hat", ylab="Y")
+abline(a = 0, b = 1)
+lines(lowess(trans$Traffic_Collisions ~ fitted(reduced4)), lty=2)
+
+r <- rstandard(reduced4)
+
+par(mfrow=c(2,3))
+plot(r ~ trans$Road_Volume, main = "Standardized Residuals vs. Road Volume", xlab = "Road Volume", ylab = "Standardized Residuals")
+plot(r ~ trans$Population_density, main = "Standardized Residuals vs. Road Kilometers", xlab = "Road Kilometers", ylab = "Standardized Residuals")
+plot(r ~ trans$Business_per_area, main = "Standardized Residuals vs. Businesses", xlab = "Businesses", ylab = "Standardized Residuals")
+plot(r ~ trans$In_Labour_Force, main = "Standardized Residuals vs. In_Labour_Force", xlab = "Population_density", ylab = "Standardized Residuals")
+
+qqnorm(r)
+qqline(r)
+
+q1 <- qqnorm(r)
+
+# are there any leverage points?
+n <- length(trans$Traffic_Collisions)
+p <- length(coef(reduced4))-1
+
+h <- hatvalues(reduced4)
+hcut <- 2*(p+1)/n
+which(h > hcut)
+
+# are therea any outliers? Check both cutoffs.
+r <- rstandard(reduced4)
+which (r < -2 | r > 2)
+which (r < -4 | r > 4)
+
+Dcutoff <- qf(0.5, p+1, n-p-1)
+D <- cooks.distance(reduced4)
+which (D > Dcutoff)
+
+DFFITScut <- 2*sqrt((p+1)/n)
+dfs <- dffits(reduced4)
+which (abs(dfs) > DFFITScut)
+
+DFBETAcut <- 2/sqrt(n)
+dfb <- dfbetas(reduced4)
+
+which(abs(dfb[,1]) > DFBETAcut)
+which(abs(dfb[,2]) > DFBETAcut)
+which(abs(dfb[,3]) > DFBETAcut)
+which(abs(dfb[,4]) > DFBETAcut)
+which(abs(dfb[,5]) > DFBETAcut)
+```
+
+```{r, include=F}
+# model 5 diaonostics
+pairs(trans[,c(4,6,7,8,10)])
+
+plot(trans$Traffic_Collisions ~ fitted(mod5), 
+     main="Y versus Y-hat", xlab="Y-hat", ylab="Y")
+abline(a = 0, b = 1)
+lines(lowess(trans$Traffic_Collisions ~ fitted(mod5)), lty=2)
+
+r <- rstandard(mod5)
+
+par(mfrow=c(2,3))
+plot(r ~ trans$Population_density, main = "Standardized Residuals vs. Road Kilometers", xlab = "Road Kilometers", ylab = "Standardized Residuals")
+plot(r ~ trans$Road_Volume, main = "Standardized Residuals vs. Road Volume", xlab = "Road Volume", ylab = "Standardized Residuals")
+plot(r ~ trans$Business_per_area, main = "Standardized Residuals vs. Businesses", xlab = "Businesses", ylab = "Standardized Residuals")
+plot(r ~ trans$TTC_Overcrowded_Routes, main = "Standardized Residuals vs.TTC_Overcrowded_Routes", xlab = "TTC Overcrowded Routes", ylab = "Standardized Residuals")
+plot(r ~ trans$In_Labour_Force, main = "Standardized Residuals vs. In_Labour_Force", xlab = "Population density", ylab = "Standardized Residuals")
+
+qqnorm(r)
+qqline(r)
+
+anova(mod5, modtrans)
+
+# are there any leverage points?
+n <- length(trans$Traffic_Collisions)
+p <- length(coef(mod5))-1
+
+h <- hatvalues(mod5)
+hcut <- 2*(p+1)/n
+which(h > hcut)
+
+# are therea any outliers? Check both cutoffs.
+r <- rstandard(mod5)
+which (r < -2 | r > 2)
+which (r < -4 | r > 4)
+
+Dcutoff <- qf(0.5, p+1, n-p-1)
+D <- cooks.distance(mod5)
+which (D > Dcutoff)
+
+DFFITScut <- 2*sqrt((p+1)/n)
+dfs <- dffits(mod5)
+which (abs(dfs) > DFFITScut)
+
+DFBETAcut <- 2/sqrt(n)
+dfb <- dfbetas(mod5)
+
+which(abs(dfb[,1]) > DFBETAcut)
+which(abs(dfb[,2]) > DFBETAcut)
+which(abs(dfb[,3]) > DFBETAcut)
+which(abs(dfb[,4]) > DFBETAcut)
+which(abs(dfb[,5]) > DFBETAcut)
+which(abs(dfb[,6]) > DFBETAcut)
+```
+
+```{r, include=FALSE}
+library(MASS)
+modaic <- stepAIC(lm(Traffic_Collisions ~ ., data=trans), direction="both", k=2) #same as mod6, last step best choice mod5
+modbic <- stepAIC(lm(Traffic_Collisions ~ ., data=trans), direction="both", k=log(length(trans$Traffic_Collisions))) #same as mod5
+
+stepAIC(lm(Traffic_Collisions ~ ., data=trans), direction="backward", k=2) #mod6
+stepAIC(lm(Traffic_Collisions ~ ., data=trans), direction="backward", k=log(length(trans$Traffic_Collisions))) #mod5
+
+stepAIC(lm(Traffic_Collisions ~ 1, data=trans), 
+        scope=list(upper=lm(Traffic_Collisions ~ ., data=trans)), 
+        direction="forward", k=2) #mod6
+stepAIC(lm(Traffic_Collisions ~ 1, data=trans), 
+        scope=list(upper=lm(Traffic_Collisions ~ ., data=trans)),
+        direction="forward", k=log(length(trans$Traffic_Collisions))) #mod3
+
+stepAIC(lm(Traffic_Collisions ~ 1, data=trans), 
+        scope=list(upper=lm(Traffic_Collisions ~ ., data=trans)),
+        direction="both", k=2) #mod6
+stepAIC(lm(Traffic_Collisions ~ 1, data=trans), 
+        scope=list(upper=lm(Traffic_Collisions ~ ., data=trans)),
+        direction="both", k=log(length(trans$Traffic_Collisions))) #mod3
+```
+
+```{r, include=FALSE}
+# validation
+mytest <- test %>% 
+  mutate(Population_density = Total_Population/Total_Area,
+         Business_per_area = Businesses/Total_Area) %>% 
+      dplyr::select(Traffic_Collisions, Pedestrian_or_Other_Collisions, Road_Kilometres, Road_Volume, TTC_Stops, TTC_Overcrowded_Routes, Population_density, Business_per_area, Movers, In_Labour_Force)
+
+trans_test <- mytest %>% 
+  mutate(Traffic_Collisions = sqrt(Traffic_Collisions), 
+         Pedestrian_or_Other_Collisions=Pedestrian_or_Other_Collisions^0.1, 
+         Road_Kilometres = (Road_Kilometres)^0.33, 
+         Road_Volume = Road_Volume, 
+         TTC_Stops = (TTC_Stops)^0.33, 
+         TTC_Overcrowded_Routes = TTC_Overcrowded_Routes^0.33, 
+         Population_density = sqrt(Population_density), 
+         Business_per_area = Business_per_area^0.1,
+         Movers = Movers^0.33,
+         In_Labour_Force = In_Labour_Force^0.33)
+
+# similar, est within one sd, different significance due to validation size
+testmod5 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Population_density + Road_Volume + TTC_Overcrowded_Routes, data=trans_test)
+summary(testmod5)
+summary(mod5)
+
+vif(testmod5)
+vif(mod5)
+```
+
+When re-examining assumptions, both models had satisfied conditions and random patterns in residual plots. Figure 2 shows that Model 5 aligned with the Q-Q line more smoothly and thus may satisfy the Normality assumption better. Similar observations appeared problematic in both models, but automated selection procedures gave the same models with 3, 5 or 6 predictors in Table 1, which further justified for Model 5. Therefore, we selected Model 5 as the final model, with the response and predictors given in Table 2.
+
+```{r, echo=FALSE}
+library(kableExtra)
+final <- round(summary(mod5)$coef[,c(1,2,4)],4)
+rownames(final) <- c("Intercept", "Cubic root of number of people in labour force", "Tenth root of business per area", "Square root of population density", "Road Volume", "Cubic root of number of TTC overcrowded routes")
+final %>% 
+    kable(booktabs = T,
+        caption =  "Model summary for the final model with five predictors, fitted on the training set.",
+        col.names = c("Estimated coefficient", "Standard error", "p-Value")) %>%
+  add_header_above(c("Response variable: Square root of number of traffic collisions" = 4)) %>% 
+  kable_styling(latex_options = c("HOLD_position", "scale_down")) %>% 
+  footnote(general = c("This is the model summary for the final transformed model fitted on the training set and there is no", 
+                       "insignificant predictors using a significance level of 0.05."))
+```
+
+
+```{r, include=FALSE}
+# Why can't we validate using model 5?
+
+# test size = training size = 67
+
+# conditions and assumptions
+
+pairs(trans_test[,c(4,6,7,8,10)])
+
+plot(trans_test$Traffic_Collisions ~ fitted(testmod5), 
+     main="Y versus Y-hat", xlab="Y-hat", ylab="Y")
+abline(a = 0, b = 1)
+lines(lowess(trans_test$Traffic_Collisions ~ fitted(testmod5)), lty=2)
+
+r <- rstandard(testmod5)
+
+par(mfrow=c(2,3))
+plot(r ~ trans_test$Population_density, main = "Standardized Residuals vs. Road Kilometers", xlab = "Road Kilometers", ylab = "Standardized Residuals")
+plot(r ~ trans_test$Road_Volume, main = "Standardized Residuals vs. Road Volume", xlab = "Road Volume", ylab = "Standardized Residuals")
+plot(r ~ trans_test$Business_per_area, main = "Standardized Residuals vs. Businesses", xlab = "Businesses", ylab = "Standardized Residuals")
+plot(r ~ trans_test$TTC_Overcrowded_Routes, main = "Standardized Residuals vs.TTC_Overcrowded_Routes", xlab = "TTC_Overcrowded_Routes", ylab = "Standardized Residuals")
+plot(r ~ trans_test$In_Labour_Force, main = "Standardized Residuals vs. In_Labour_Force", xlab = "Population_density", ylab = "Standardized Residuals")
+
+qqnorm(r)
+qqline(r)
+
+
+# are there any leverage points?
+n <- length(trans_test$Traffic_Collisions)
+p <- length(coef(testmod5))-1
+
+h <- hatvalues(testmod5)
+hcut <- 2*(p+1)/n
+which(h > hcut)
+
+# are therea any outliers? Check both cutoffs.
+r <- rstandard(testmod5)
+which (r < -2 | r > 2)
+which (r < -4 | r > 4)
+
+Dcutoff <- qf(0.5, p+1, n-p-1)
+D <- cooks.distance(testmod5)
+which (D > Dcutoff)
+
+DFFITScut <- 2*sqrt((p+1)/n)
+dfs <- dffits(testmod5)
+which (abs(dfs) > DFFITScut)
+
+DFBETAcut <- 2/sqrt(n)
+dfb <- dfbetas(testmod5)
+
+which(abs(dfb[,1]) > DFBETAcut)
+which(abs(dfb[,2]) > DFBETAcut)
+which(abs(dfb[,3]) > DFBETAcut)
+which(abs(dfb[,4]) > DFBETAcut)
+which(abs(dfb[,5]) > DFBETAcut)
+which(abs(dfb[,6]) > DFBETAcut)
+
+# obs 38 with extremely high population density
+
+# multicollinearity slightly lower than train
+vif(mod5)
+vif(testmod5)
+```
+
+```{r, include=FALSE}
+r <- rstandard(testmod5)
+
+par(mfrow=c(2,3))
+plot(r ~ trans_test$Population_density, xlab = "Road Kilometers", ylab = "Standardized Residuals")
+plot(r ~ trans_test$Road_Volume, xlab = "Road Volume", ylab = "Standardized Residuals")
+plot(r ~ trans_test$Business_per_area, xlab = "Businesses", ylab = "Standardized Residuals")
+plot(r ~ trans_test$TTC_Overcrowded_Routes, xlab = "TTC_Overcrowded_Routes", ylab = "Standardized Residuals")
+plot(r ~ trans_test$In_Labour_Force, xlab = "Population_density", ylab = "Standardized Residuals")
+
+qqnorm(r)
+qqline(r)
+```
+
+The final model was fitted to test data for model validation. Although the estimated coefficients and $R^2_{adj}$ values were similar based on Appendix Table 4, two significant predictors in Model 5, road volume and cubic root of TTC overcrowded routes, were insignificant in the test set model. Conditions and residual plots showed no unexpected patterns, but the Normality assumption was violated for the test set model in Figure 2. Thus, we failed to validate the final model on the test set.
+
+\newpage
+\begin{center} Figure 2: Normal Q-Q plots comparison for Model 4, Model 5 and test set model. \end{center} 
+```{r, echo=FALSE,  fig.width=8, fig.height=5, fig.align='center'}
+r4 <- rstandard(reduced4)
+r5 <- rstandard(mod5)
+rtest <- rstandard(testmod5)
+
+# par(mfrow=c(2,4))
+# plot(r5 ~ trans$Population_density, main = "Model 5 Residual Plot", xlab = "Road Kilometers", ylab = "Standardized Residuals")
+# plot(r5 ~ trans$Road_Volume, main = "Model 5 Residual Plot", xlab = "Road Volume", ylab = "Standardized Residuals")
+# plot(r5 ~ trans$Business_per_area, main = "Model 5 Residual Plot", xlab = "Businesses", ylab = "Standardized Residuals")
+# plot(r5 ~ trans$TTC_Overcrowded_Routes, main = "Model 5 Residual Plot", xlab = "TTC Overcrowded Routes", ylab = "Standardized Residuals")
+# plot(r5 ~ trans$In_Labour_Force, main = "Model 5 Residual Plot", xlab = "Population Density", ylab = "Standardized Residuals")
+par(mfrow=c(1,3))
+qqnorm(r4, main = "Q-Q Plot of Model 4", family="serif",cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5)
+qqline(r4)
+qqnorm(r5, main = "Q-Q Plot of Model 5",family="serif",cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5)
+qqline(r5)
+qqnorm(rtest, main = "Q-Q Plot of Test set model",family="serif", cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5)
+qqline(rtest)
+```
+\begingroup
+\footnotesize
+\noindent
+*Note:*
+Model 4 and 5 were fitted on the training set and the test set model was fitted on the test set. Model 5 aligned with the Q-Q line more smoothly than Model 4. Severe deviation from the Q-Q line could be spotted in the Q-Q plot for test set model.
+\endgroup
+```{r, echo=FALSE}
+mtr <- round(apply(mydata[,], 2, mean),4)
+sdtr <- round(apply(mydata[,], 2, sd),4)
+metr <- round(apply(mydata[,], 2, median),4)
+
+mtest <- round(apply(mytest[,], 2, mean),4)
+sdtest <- round(apply(mytest[,], 2, sd),4)
+metest <- round(apply(mytest[,], 2, median),4)
+
+
+dfbtr <- c("-","-","-","4","-","8","5","4","","5")
+dfbtest <- c("-","-","-","3","-","4","2","4","","3")
+
+tb <- cbind(mtr, mtest, sdtr, sdtest, metr, metest, dfbtr, dfbtest)
+rownames(tb) <- c("Traffic collisions (n)", "Pedestrian or other collisions (n)", "Road kilometres", "Road volume", "TTC stops (n)",
+                  "TTC overcrowded routes (n)", "Population density", "Business per area", "Movers (n)", "People in labour force (n)")
+
+tb %>% 
+  kable(booktabs = T, 
+        align = 'c',
+        caption = "Training and test sets summary statistics and influential points using DFBETAs.",
+        col.names = c("training", "test","training", "test","training", "test","training", "test")) %>%
+  kable_styling(latex_options = c("HOLD_position","scale_down")) %>%
+  add_header_above(c(" " = 1, "Mean" = 2, "Standard Deviation" = 2, "Median" = 2, "Number of influential\n points for corresponding \n coefficient in the models" = 2)) %>% 
+  footnote(general = c("Summary statistics of both training and test set are similar, but there are more influential observations on the esitmate",
+                       "coefficients in the training set. (n) denotes 'counts'. Each training and test set has 67 observations."))
+```
+
+```{r, include=FALSE}
+# Variable            |  Mean (s.d.) in training | Mean (s.d.) in test | Median in training | Median in test |Number of influential points for corresponding coefficient in training | Number of influential points for corresponding coefficient in test
+# ---------------------|-------------------------|--------------------|--------------------|---------------|----------------|---------------
+# Number of traffic collisions | `r round(mtr[1], 3)` (`r round(sdtr[1], 3)`) | `r round(mtest[1], 3)` (`r round(sdtest[1], 3)`) | `r round(metr[1], 3)` | `r round(metest[1], 3)`  | - | -
+# Number of pedstrain or other collisions | `r round(mtr[2],3)` (`r round(sdtr[2],3)`) | `r round(mtest[2],3)` (`r round(sdtest[2],3)`) |`r round(metr[2], 3)` |`r round(metest[2], 3)`  | - | -
+# Road kilometres | `r round(mtr[3],3)` (`r round(sdtr[3],3)`) | `r round(mtest[3],3)` (`r round(sdtest[3],3)`) |`r round(metr[3], 3)` | `r round(metest[3], 3)` | - | -
+# Road Volume | `r round(mtr[4],3)` (`r round(sdtr[4],3)`) | `r round(mtest[4],3)` (`r round(sdtest[4],3)`) |`r round(metr[4], 3)` |`r round(metest[4], 3)` | 4 | 3
+# Number of TTC stops | `r round(mtr[5],3)` (`r round(sdtr[5],3)`) | `r round(mtest[5],3)` (`r round(sdtest[5],3)`) |`r round(metr[5], 3)` |`r round(metest[5], 3)` | - | -
+# Number of TTC overcrowded routes | `r round(mtr[6],3)` (`r round(sdtr[6],3)`) | `r round(mtest[6],3)` (`r round(sdtest[6],3)`) |`r round(metr[6], 3)` |`r round(metest[6], 3)` | 8 | 4 
+# Population density | `r round(mtr[7],3)` (`r round(sdtr[7],3)`) | `r round(mtest[7],3)` (`r round(sdtest[7],3)`) | `r round(metr[7], 3)` |`r round(metest[7], 3)` | 5 | 2
+# Business per area | `r round(mtr[8],3)` (`r round(sdtr[8],3)`) | `r round(mtest[8],3)` (`r round(sdtest[8],3)`) |`r round(metr[8], 3)` |`r round(metest[8], 3)` | 4 | 4
+# Number of movers | `r round(mtr[9],3)` (`r round(sdtr[9],3)`) | `r round(mtest[9],3)` (`r round(sdtest[9],3)`) | `r round(metr[9], 3)` |`r round(metest[9], 3)` | - | -
+# People in labour force | `r round(mtr[10],3)` (`r round(sdtr[10],3)`) | `r round(mtest[10],3)` (`r round(sdtest[10],3)`) |`r round(metr[10], 3)` |`r round(metest[10], 3)` | 5 | 3
+# 
+# Table: Summary statistics in training and test dataset, each of size 67. 
+```
+
+\newpage
+## Discussion
+
+Due to the monotonicity of power transformations, we could interpret that the increase in labour force, business per area and road volume may lead to more traffic collisions in the presence of other predictors. It makes sense since more commuters resulting from a greater employed population may lead to more collisions on the road, which is also consistent with the reported relationship between employed population and vehicle-pedestrian collisions (Wier et al., 2009). Conversely, greater population density and more overcrowded TTC routes may result in fewer traffic collisions when conditioning on other variables, supported by the literature relationship between population density and crashes (Park & Ko, 2020). Simultaneously, more overcrowded TTC routes may infer public transformation being a popular choice in the neighbourhood, potentially reducing traffic collisions. Therefore, the final model may provide insights into the factors related to traffic collisions. The results are important because they suggest that more convenient public transportations should be provided for commuters, and roads with higher volumes should require more attention or potential diversion to reduce the number of traffic collisions.
+
+Limitations of this study include the removed observations with missing values, which may lead to biases in our resulting model. Also, multicollinearity was still present, although all VIFs were below 3 for both models using training and test sets, leading to a slightly unstable regression surface. Furthermore, the final model failed to be validated on the test set. In Table 3, the training set had more influential observations on estimated coefficients despite the similar summary statistics in both sets. Randomization before the analysis led to different problematic observations in training and test sets, which may result in disproportionate effects on the regression lines and the failed validation. We also saw more significant predictors in Model 5, so another reason may be the overfitting of the training set caused by overly specific transformations. Therefore, although the final model meets the goal of being interpretable and descriptive, it may not perform well on unseen data and thus have a weaker predictive ability.
+
+\newpage
+
+## Reference List
+
+\begingroup
+\setlength{\parindent}{-0.2in}
+\setlength{\leftskip}{0.2in}
+\setlength{\parskip}{8pt}
+\noindent
+
+Park, S. & Ko, D. (2020). A multilevel model approach for investigating individual accident characteristics and neighborhood environment characteristics affecting pedestrian-vehicle crashes. *International Journal of Environmental Research and Public Health, 17*(9), 3107. https://doi.org/10.3390/ijerph17093107
+
+Wellbeing Toronto (2017). *Wellbeing Toronto - Demographics* [dataset]. City of Toronto Open Data.
+https://open.toronto.ca/dataset/wellbeing-toronto-demographics/
+
+Wellbeing Toronto (2014). *Wellbeing Toronto - Economics* [dataset]. City of Toronto Open Data. https://open.toronto.ca/dataset/wellbeing-toronto-economics/
+
+Wellbeing Toronto (2014). *Wellbeing Toronto - Transportation* [dataset]. City of Toronto Open Data. https://open.toronto.ca/dataset/wellbeing-toronto-transportation/
+
+Wier, M., Weintraub, J., Humphreys, E. H., Seto, E., & Bhatia, R. (2009). An area-level model of vehicle-pedestrian injury collisions with implications for land use and transportation planning. *Accident Analysis and Prevention, 41*(1), 137–145. https://doi.org/10.1016/j.aap.2008.10.001 
+
+World Health Organization. (2018). *Global status report on road safety 2018: summary* (No. WHO/NMH/NVI/18.20). World Health Organization. 
+
+Xu, C., Wang, Y., Liu, P., Wang, W., & Bao, J. (2018). Quantitative risk assessment of freeway crash casualty using high-resolution traffic data. *Reliability Engineering & System Safety, 169*, 299–311. https://doi.org/10.1016/j.ress.2017.09.005 
+
+\endgroup
+
+## Appendix
+
+```{r, include=FALSE}
+
+library(patchwork)
+
+# mydata %>% 
+#   ggplot(aes(x=Traffic_Collisions)) +
+#   geom_histogram() +
+
+sp1 <- mydata %>% 
+  ggplot(aes(x=Pedestrian_or_Other_Collisions, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Pedestrian or Other Collisions", y = "Traffic Collisions")
+
+sp2 <- mydata %>% 
+  ggplot(aes(x=Road_Kilometres, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Road Kilometres", y = "Traffic Collisions")
+
+sp3 <- mydata %>% 
+  ggplot(aes(x=Road_Volume, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Road Volume", y = "Traffic Collisions")
+
+sp4 <- mydata %>% 
+  ggplot(aes(x=TTC_Stops, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Number of TTC Stops", y = "Traffic Collisions")
+
+sp5 <- mydata %>% 
+  ggplot(aes(x=TTC_Overcrowded_Routes, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Number of TTC Overcrowded Routes", y = "Traffic Collisions")
+
+sp6 <- mydata %>% 
+  ggplot(aes(x=Population_density, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Population density", y = "Traffic Collisions")
+
+sp7 <- mydata %>% 
+  ggplot(aes(x=Business_per_area, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Business per area", y = "Traffic Collisions")
+
+sp8 <- mydata %>% 
+  ggplot(aes(x=Movers, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Number of movers", y = "Traffic Collisions")
+
+sp9 <- mydata %>% 
+  ggplot(aes(x=In_Labour_Force, y=Traffic_Collisions)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Number of people in labour force", y = "Traffic Collisions")
+
+# hist(mydata$Traffic_Collisions)
+# 
+# plot(mydata$Road_Kilometres, mydata$Traffic_Collisions,
+#      xlab = "Road Kilometres",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.5, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$Road_Kilometres, mydata$Traffic_Collisions), col = "blue")
+# 
+# plot(mydata$Pedestrian_or_Other_Collisions, mydata$Traffic_Collisions,
+#      xlab = "Number of pedestrian or other collisions",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.5, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$Road_Kilometres, mydata$Traffic_Collisions), col = "blue")
+# 
+# plot(mydata$Road_Volume, mydata$Traffic_Collisions,
+#      xlab = "Road Volume",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.5, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$Road_Volume, mydata$Traffic_Collisions), col = "blue")
+# 
+# plot(mydata$TTC_Stops, mydata$Traffic_Collisions,
+#      xlab = "Number of TTC stops",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.5, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$TTC_Stops, mydata$Traffic_Collisions), col = "blue")
+# 
+# plot(mydata$TTC_Overcrowded_Routes, mydata$Traffic_Collisions,
+#      xlab = "Number of TTC Overcrowded Routes",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.3, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$TTC_Overcrowded_Routes, mydata$Traffic_Collisions), col = "blue")
+# 
+# plot(mydata$Business_per_area, mydata$Traffic_Collisions,
+#      xlab = "Business per area",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.3, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$Business_per_area, mydata$Traffic_Collisions), col = "blue")
+# 
+# plot(mydata$Movers, mydata$Traffic_Collisions,
+#      xlab = "Number of movers",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.3, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$Movers, mydata$Traffic_Collisions), col = "blue")
+# 
+# plot(mydata$In_Labour_Force, mydata$Traffic_Collisions,
+#      xlab = "People in labour force",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.3, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$In_Labour_Force, mydata$Traffic_Collisions), col = "blue")
+# 
+# plot(mydata$Population_density, mydata$Traffic_Collisions,
+#      xlab = "Population density",
+#      ylab = "Traffic Collisions",
+#      cex.main=1.3, cex.lab=1.5, cex.sub=1.5, cex.axis=1.5)
+# lines(lowess(mydata$Population_density, mydata$Traffic_Collisions), col = "blue")
+```
+
+```{r, echo=FALSE, message = FALSE, fig.width=8,fig.length=6,fig.align='center'}
+datlong = gather(mydata, key = "variable", value = "value", -Traffic_Collisions)
+
+datlong <- datlong %>% 
+  mutate(variable = case_when(variable  == "Pedestrian_or_Other_Collisions" ~ "Number of Pedestrian or Other Collisions",
+                           variable  == "Road_Kilometres" ~ "Road Kilometres",
+                           variable  == "Road_Volume" ~ "Road Volume",
+                           variable  == "TTC_Stops" ~ "Number of TTC Stops",
+                           variable  == "TTC_Overcrowded_Routes" ~ "Number of TTC Overcrowded Routes",
+                           variable  == "Population_density" ~ "Population Density",
+                           variable  == "Business_per_area" ~ "Business per Area",
+                           variable  == "Movers" ~ "Number of Movers",
+                           variable  == "In_Labour_Force" ~ "Number of People in Labour Force"))
+
+ggplot(datlong, aes(x = value, y = Traffic_Collisions)) +
+     geom_point() +
+    geom_smooth() +
+     theme_bw() +
+     facet_wrap(~variable, scales = "free_x", strip.position = "bottom") +
+     theme(strip.background = element_blank(),
+           strip.placement = "outside", 
+           text = element_text(size=11, family="serif"),
+           plot.title = element_text(hjust = 0.5),
+           plot.caption = element_text(size=11, hjust = 0))+
+     labs(
+       title = 'Figure 3: Scatter plots between traffic collisions and each potential predictors.',
+       caption = 'Note: Each scatter plot is for the untransformed training set with 67 observations. Smooth line in blue is fitted to each plot.',
+       x = NULL, y = 'Number of Traffic Collisions')
+```
+
+```{r, echo=FALSE}
+val <- round(summary(testmod5)$coef[,c(1,2,4)],4)
+rownames(val) <- linebreak (c("Intercept", "Cubic root of number of\n people in labour force", "Tenth root of\n business per area", "Square root of \n population density", "Road Volume", "Cubic root of\n number of TTC overcrowded routes"))
+cbind(final, val) %>% 
+    kable(booktabs = T,
+          align = 'c',
+        caption =  "Comparison of the final model on training set and test set ",
+        col.names = c(rep(c("Estimated \n coefficient", "Standard \n error", "p-Value"),2))) %>%
+  
+  add_header_above(c(" " = 1, "Adjusted R squared = 0.7509" = 3, "Adjusted R squared = 0.7428" = 3)) %>%
+  add_header_above(c(" " = 1, "Training set model (Model 5)" = 3, "Test set model" = 3)) %>% 
+  add_header_above(c("Response variable: Square root of number of traffic collisions" = 7)) %>% 
+  kable_styling(latex_options = c("HOLD_position"), font_size = 8) %>% 
+  column_spec(4, color = c(rep("black", 4), rep('red',2))) %>% 
+  column_spec(7, color = c(rep("black", 4), rep('red',2))) %>% 
+  column_spec(1, width = "4cm") %>% 
+  column_spec(2:7, width = "1.5cm") %>% 
+  footnote(general =  c("Road volume and cubic root of number of TTC overcrowded routes are significant in the training set model, but not in", 
+                        "the test set model. The corresponding p-values are highlighted in red."))
+```
+
+```{r, include=FALSE}
+# validate using reduced4
+testmod4 <- lm(Traffic_Collisions ~ In_Labour_Force + Business_per_area + Road_Volume + Population_density, data=trans_test)
+summary(testmod4)
+summary(reduced4)
+
+# test size = training size = 67
+
+# conditions and assumptions
+
+pairs(trans_test[,c(4,6,8,10)])
+
+plot(trans_test$Traffic_Collisions ~ fitted(testmod4), 
+     main="Y versus Y-hat", xlab="Y-hat", ylab="Y")
+abline(a = 0, b = 1)
+lines(lowess(trans_test$Traffic_Collisions ~ fitted(testmod4)), lty=2)
+
+r <- rstandard(testmod4)
+
+par(mfrow=c(2,3))
+plot(r ~ trans_test$Population_density, main = "Standardized Residuals vs. Road Kilometers", xlab = "Road Kilometers", ylab = "Standardized Residuals")
+plot(r ~ trans_test$Road_Volume, main = "Standardized Residuals vs. Road Volume", xlab = "Road Volume", ylab = "Standardized Residuals")
+plot(r ~ trans_test$Business_per_area, main = "Standardized Residuals vs. Businesses", xlab = "Businesses", ylab = "Standardized Residuals")
+plot(r ~ trans_test$In_Labour_Force, main = "Standardized Residuals vs. In_Labour_Force", xlab = "Population_density", ylab = "Standardized Residuals")
+
+qqnorm(r)
+qqline(r)
+
+
+# are there any leverage points?
+n <- length(trans_test$Traffic_Collisions)
+p <- length(coef(testmod4))-1
+
+h <- hatvalues(testmod4)
+hcut <- 2*(p+1)/n
+which(h > hcut)
+
+# are therea any outliers? Check both cutoffs.
+r <- rstandard(testmod4)
+which (r < -2 | r > 2)
+which (r < -4 | r > 4)
+
+Dcutoff <- qf(0.5, p+1, n-p-1)
+D <- cooks.distance(testmod4)
+which (D > Dcutoff)
+
+DFFITScut <- 2*sqrt((p+1)/n)
+dfs <- dffits(testmod4)
+which (abs(dfs) > DFFITScut)
+
+DFBETAcut <- 2/sqrt(n)
+dfb <- dfbetas(testmod4)
+
+which(abs(dfb[,1]) > DFBETAcut)
+which(abs(dfb[,2]) > DFBETAcut)
+which(abs(dfb[,3]) > DFBETAcut)
+which(abs(dfb[,4]) > DFBETAcut)
+which(abs(dfb[,5]) > DFBETAcut)
+
+# obs 38 with extremely high population density
+
+# multicollinearity slightly lower than train
+vif(reduced4)
+vif(testmod4)
+```
+
+```{r, include=FALSE}
+# mod 6 diagnostics
+
+pairs(trans[,c(3,4,6,7,8,10)])
+
+plot(trans$Traffic_Collisions ~ fitted(mod6), 
+     main="Y versus Y-hat", xlab="Y-hat", ylab="Y")
+abline(a = 0, b = 1)
+lines(lowess(trans$Traffic_Collisions ~ fitted(mod6)), lty=2)
+
+r <- rstandard(mod6)
+
+par(mfrow=c(3,3))
+plot(r ~ trans$Road_Kilometres, main = "Standardized Residuals vs. Road Kilometers", xlab = "Road Kilometers", ylab = "Standardized Residuals")
+plot(r ~ trans$Road_Volume, main = "Standardized Residuals vs. Road Volume", xlab = "Road Volume", ylab = "Standardized Residuals")
+plot(r ~ trans$Business_per_area, main = "Standardized Residuals vs. Businesses", xlab = "Businesses", ylab = "Standardized Residuals")
+plot(r ~ trans$TTC_Overcrowded_Routes, main = "Standardized Residuals vs.TTC_Overcrowded_Routes", xlab = "TTC_Overcrowded_Routes", ylab = "Standardized Residuals")
+plot(r ~ trans$Population_density, main = "Standardized Residuals vs. Population_density", xlab = "Population_density", ylab = "Standardized Residuals")
+plot(r ~ trans$In_Labour_Force, main = "Standardized Residuals vs. In_Labour_Force", xlab = "Population_density", ylab = "Standardized Residuals")
+
+qqnorm(r)
+qqline(r)
+
+anova(mod6, modtrans)
+
+# are there any leverage points?
+n <- length(trans$Traffic_Collisions)
+p <- length(coef(mod6))-1
+
+h <- hatvalues(mod6)
+hcut <- 2*(p+1)/n
+which(h > hcut)
+
+# are therea any outliers? Check both cutoffs.
+r <- rstandard(mod6)
+which (r < -2 | r > 2)
+which (r < -4 | r > 4)
+
+Dcutoff <- qf(0.5, p+1, n-p-1)
+D <- cooks.distance(mod6)
+which (D > Dcutoff)
+
+DFFITScut <- 2*sqrt((p+1)/n)
+dfs <- dffits(mod6)
+which (abs(dfs) > DFFITScut)
+
+DFBETAcut <- 2/sqrt(n)
+dfb <- dfbetas(mod6)
+
+which(abs(dfb[,1]) > DFBETAcut)
+which(abs(dfb[,2]) > DFBETAcut)
+which(abs(dfb[,3]) > DFBETAcut)
+which(abs(dfb[,4]) > DFBETAcut)
+which(abs(dfb[,5]) > DFBETAcut)
+which(abs(dfb[,6]) > DFBETAcut)
+which(abs(dfb[,7]) > DFBETAcut)
+```
+
+```{r,include=FALSE}
+# other mods
+
+plot(trans$Traffic_Collisions ~ fitted(mod7), 
+     main="Y versus Y-hat", xlab="Y-hat", ylab="Y")
+abline(a = 0, b = 1)
+lines(lowess(trans$Traffic_Collisions ~ fitted(mod7)), lty=2)
+
+r <- rstandard(mod4)
+
+par(mfrow=c(2,3))
+plot(r ~ trans$Population_density, main = "Standardized Residuals vs. Road Kilometers", xlab = "Road Kilometers", ylab = "Standardized Residuals")
+plot(r ~ trans$Road_Volume, main = "Standardized Residuals vs. Road Volume", xlab = "Road Volume", ylab = "Standardized Residuals")
+plot(r ~ trans$Business_per_area, main = "Standardized Residuals vs. Businesses", xlab = "Businesses", ylab = "Standardized Residuals")
+plot(r ~ trans$TTC_Overcrowded_Routes, main = "Standardized Residuals vs.TTC_Overcrowded_Routes", xlab = "TTC_Overcrowded_Routes", ylab = "Standardized Residuals")
+plot(r ~ trans$In_Labour_Force, main = "Standardized Residuals vs. In_Labour_Force", xlab = "Population_density", ylab = "Standardized Residuals")
+
+qqnorm(r)
+qqline(r)
+```
